@@ -13,13 +13,14 @@ factores=function(vector){
 
 limpiar2=function(df){
   for (k in 2:length(colnames(df))){
-    print(k)
-    print(df[,k])
-    if (is.numeric(df[,k]==TRUE)){
+    if (is.numeric(df[,k])==TRUE){
+      print("hola")
       for (r in 1:length(row.names(df))){
         if (is.na(df[r,k])==1){
+          print("na")
           df[r,k] <-round(mean(df[,k][is.na(df[,k])==0]))
         }else if(df[r,k]>10){
+          print("mayor")
           df[r,k] <- round(df[r,k]/10)
         }
       }
@@ -36,7 +37,7 @@ limpiar2=function(df){
         }else if(df[r,k]>10){
           print(2)
           df[r,k] <- round(df[r,k]/10)
-        }else if ((k==length(colnames(df))) && !(df[r,k] %in% levl)){
+        }else if (!(df[r,k] %in% levl)){
           print(3)
           df[r,k] = moda(df[,k][is.na(df[,k])==0])
         }
@@ -61,7 +62,13 @@ train_complete[,12] <- as.factor(train_complete[,12])
 colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
 train_complete <- limpiar2(train_complete)
 
-test_complete <- limpiar(raw_test)
+test_complete <- as.data.frame(lapply(raw_test,as.numeric))
+test_complete[,12] <- as.factor(test_complete[,12])
+colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
+test_complete <- limpiar2(test_complete)
+
+## Ya tenemos los datos bien limpios
+
 
 colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
 colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
