@@ -1,4 +1,6 @@
 library(tidyverse)
+library(dplyr)
+library(stringr)
 
 moda=function(vector){
   return(as.numeric(names(which.max(table(unique(vector))))))
@@ -7,31 +9,6 @@ moda=function(vector){
 factores=function(vector){
   return(names(table(vector)[table(vector)>50]))
 }
-
-limpiar=function(df){
-  i=0
-  df <- as.data.frame(lapply(df, as.numeric))
-  for (k in 2:length(colnames(df))){
-    for (r in 1:length(row.names(df))){
-      if (is.na(df[r,k])==1){
-        df[r,k] <-moda(df[,k])
-      }else if(df[r,k]>10){
-        df[r,k] <- round(df[r,k]/10)
-      }else if ((k==length(colnames(df))) && (df[r,k] %in% c(3,1,0))){
-        print(df[r,k])
-        df[r,k] = moda(df[,k])
-        print(names(as.numeric(names(which.max(table(unique(df[,k])))))))
-        i=0
-      }
-      print(!(df[r,k] %in% c(2,4,"NA")))
-      i=i+1
-    }
-  }
-  print(i)
-
-  return(df)
-}
-
 
 
 limpiar2=function(df){
@@ -78,7 +55,7 @@ raw_train=read.csv("./data/Breast_Cancer_train.data",sep="_",header = F)
 raw_test <- read.csv("./data/Breast_Cancer_test_completo.csv")
 
 
-train_complete <- mutate_all(raw_train~ str_replace_all(., "h", ""))
+train_complete <- raw_train %>% mutate_all(~ str_replace_all(., "h", ""))
 train_complete  <- as.data.frame(lapply(train_complete, as.numeric))
 train_complete[,12] <- as.factor(train_complete[,12])
 colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
