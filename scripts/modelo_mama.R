@@ -70,19 +70,50 @@ test_complete <- limpiar2(test_complete)
 ## Ya tenemos los datos bien limpios
 
 
-colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
-colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
-test_complete$class <- (test_complete$class/2)-1
-train_complete$class <- (train_complete$class/2)-1
-
-train_complete$class <- round(train_complete$class)
-test_complete$class <- round(test_complete$class)
-
-test_complete$class <- as.factor(test_complete$class)
-levels(test_complete$class) <- c("Benign","Malign")
-train_complete$class <- as.factor(train_complete$class)
 levels(train_complete$class) <- c("Benign","Malign")
+levels(test_complete$class) <- c("Benign","Malign")
 
 
 
 ## Ya hemos preparado los datos
+train_complete <- train_complete[sample(1:length(row_number(train_complete))),]
+
+tercio <- round(length(row_number(train_complete))/3)
+
+train_group1 <- train_complete[1:tercio,]
+train_group2 <- train_complete[(tercio+1):(tercio*2),]
+train_group3 <- train_complete[((tercio*2)+1):length(row_number(train_complete)),]
+
+formula="class~"
+for (name in 2:(length(colnames(train_complete))-1)){
+  if (name==2){
+    formula=paste0(formula,colnames(train_complete)[name])
+  }else{
+    formula=paste(formula,colnames(train_complete)[name],sep="+")
+  }
+  
+}
+
+for (step in 1:10){
+  print(step)
+  modelo=glm(formula,train_group1,family=(binomial(link="logit")))
+  resumen=summary(modelo)
+  menos_influyente=rownames(resumen$coefficients)[resumen$coefficients[,4]==max(resumen$coefficients[,4])]
+  primero_en_formula=unlist(str_split(str_remove(formula,"class~"),pattern = "\\+"))[1]
+  if(resumen$coefficients[,4][resumen$coefficients[,4]==max(resumen$coefficients[,4])]<0.05){
+    print("ya ha terminado el stepwise")
+    break
+  }
+  if (menos_influyente==primero_en_formula){
+    formula=str_remove(formula,paste0(primero_en_formula,"\\+"))
+  }else{
+    formula=str_remove(formula,paste0("\\+",menos_influyente))
+  }
+  
+  
+}
+  
+
+
+
+brea
