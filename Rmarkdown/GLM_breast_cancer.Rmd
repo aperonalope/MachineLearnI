@@ -1,0 +1,37 @@
+---
+title: "GLM for por prediction of breast cancer malignancy"
+author: "Alvaro Perona"
+date: "2024-02-27"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+Cargamos los datos de entreno y los datos de testeo
+```{r}
+raw_train=read.csv("./Data/Breast_Cancer_train.data",sep="_",header = F)
+raw_test <- read.csv("./Data/Breast_Cancer_test_completo.csv")
+```
+
+Creamos una funcion donde los NAs sean sustituidos por el valor promedio entero de esa columna y si hay un valor superior a 10, este sea divididdo entre 10 y redondeamos al numero entero hacia abajo, ya que suponemos que el ultimo numero sobra y se ha introducido por error.
+```{r}
+limpiar=function(df){
+  df <- as.data.frame(lapply(df, as.numeric))
+  for (k in 2:length(colnames(df))){
+    for (r in 1:length(row.names(df))){
+      if (is.na(df[r,k])==1){
+        df[r,k] <- round(mean(df[,k][is.na(df[,k])==0]))
+      }else if(df[r,k]>10){
+        df[r,k] <- floor(df[r,k]/10)
+      }
+    }
+  }
+  return(df)
+}
+
+```
+
+
+
