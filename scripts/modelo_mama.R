@@ -74,11 +74,11 @@ limpiar2=function(df){
   return(df)
 }
 
-raw_train=read.csv("./Data/Breast_Cancer_train.data",sep="_",header = F)
-raw_test <- read.csv("./Data/Breast_Cancer_test_completo.csv")
+raw_train=read.csv("./data/Breast_Cancer_train.data",sep="_",header = F)
+raw_test <- read.csv("./data/Breast_Cancer_test_completo.csv")
 
 
-train_complete <- raw_train %>% mutate_all(~ str_replace_all(., "h", ""))
+train_complete <- mutate_all(raw_train~ str_replace_all(., "h", ""))
 train_complete  <- as.data.frame(lapply(train_complete, as.numeric))
 train_complete[,12] <- as.factor(train_complete[,12])
 colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
