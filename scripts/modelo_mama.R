@@ -1,7 +1,7 @@
 library(tidyverse)
 library(dplyr)
 library(stringr)
-
+library(MASS)
 moda=function(vector){
   return(as.numeric(names(which.max(table(unique(vector))))))
 }
@@ -22,6 +22,8 @@ limpiar2=function(df){
         }else if(df[r,k]>10){
           print("mayor")
           df[r,k] <- round(df[r,k]/10)
+        }else if (df[r,k]<0){
+          df[r,k]=-df[r,k]
         }
       }
     }else if(is.factor(df[,k])==TRUE){
@@ -84,36 +86,79 @@ train_group1 <- train_complete[1:tercio,]
 train_group2 <- train_complete[(tercio+1):(tercio*2),]
 train_group3 <- train_complete[((tercio*2)+1):length(row_number(train_complete)),]
 
-formula="class~"
-for (name in 2:(length(colnames(train_complete))-1)){
-  if (name==2){
-    formula=paste0(formula,colnames(train_complete)[name])
-  }else{
-    formula=paste(formula,colnames(train_complete)[name],sep="+")
+stepwise_down=function(df,prediccion){
+  i=1
+  formula=paste0(prediccion,"~")
+  resto_variables <-  colnames(df)[!(colnames(df)==prediccion)]
+  for (name in 1:(length(resto_variables))){
+    if (name==1){
+      formula=paste0(formula,resto_variables[name])
+    }else{
+      formula=paste(formula,resto_variables[name],sep="+")
+    }
+    
+  }
+  print(formula)
+  
+  for (step in 1:10){
+    print(step)
+    modelo=glm(formula,df,family=(binomial(link="logit")))
+    resumen=summary(modelo)
+    menos_influyente=rownames(resumen$coefficients)[resumen$coefficients[,4]==max(resumen$coefficients[,4])]
+    primero_en_formula=unlist(str_split(str_remove(formula,paste0(prediccion,"~")),pattern = "\\+"))[1]
+    print(primero_en_formula)
+    if(resumen$coefficients[,4][resumen$coefficients[,4]==max(resumen$coefficients[,4])]<0.05){
+      print("ya ha terminado el stepwise")
+      break
+    }
+    if (menos_influyente==primero_en_formula){
+      formula=str_remove(formula,paste0(menos_influyente,"\\+"))
+    }else{
+      formula=str_remove(formula,paste0("\\+",menos_influyente))
+    }
+    
+    
   }
   
+  return(modelo)
 }
 
-for (step in 1:10){
-  print(step)
-  modelo=glm(formula,train_group1,family=(binomial(link="logit")))
-  resumen=summary(modelo)
-  menos_influyente=rownames(resumen$coefficients)[resumen$coefficients[,4]==max(resumen$coefficients[,4])]
-  primero_en_formula=unlist(str_split(str_remove(formula,"class~"),pattern = "\\+"))[1]
-  if(resumen$coefficients[,4][resumen$coefficients[,4]==max(resumen$coefficients[,4])]<0.05){
-    print("ya ha terminado el stepwise")
-    break
+
+
+transformaciones=function(df,firs_col,last_col){
+  for (columna in firs_col:last_col){
+    print(columna)
+    box=boxcox(df[,columna] ~1)
+    lambda=box$x[which.max(box$y)]
+    if (lambda <= -1.5){
+      df[,columna]=1/((df[,columna])^2)
+    }else if(lambda> -1.5 && lambda<= -0.75){
+      df[,columna]=1/df[,columna]
+    }else if (lambda> -0.75 && lambda<= -0.25){
+      df[,columna]=1 /sqrt(df[,columna])
+    }else if(lambda> -0.25 && lambda <= 0.25){
+      df[,columna]=log(df[,columna])
+    }else if (lambda> 0.25 && lambda <= 0.75){
+      df[,columna]=sqrt(df[,columna])
+    }else if (lambda> 0.75 && lambda <= 1.5){
+      df[,columna]=df[,columna]
+    }else if (lambda> 1.5 ){
+      df[,columna]=df[,columna]^2
+    }
   }
-  if (menos_influyente==primero_en_formula){
-    formula=str_remove(formula,paste0(primero_en_formula,"\\+"))
-  }else{
-    formula=str_remove(formula,paste0("\\+",menos_influyente))
-  }
-  
-  
+  return(df)
 }
-  
 
 
+lambda= -3
+r=switch(lambda,
+       lambda < -1.5,{
+         lambda=lambda*3
+       },
+       (lambda >-1.5 && lambda<=0.75),{
+         lambda=lambda*3
+       }
+       
+       
+)
 
-brea

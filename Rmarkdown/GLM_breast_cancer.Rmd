@@ -46,6 +46,9 @@ limpiar2=function(df){
         }else if(df[r,k]>10){
           print("mayor")
           df[r,k] <- round(df[r,k]/10)
+        #Si son menores de 0 las conviertes en positivo
+        }else if (df[r,k]<0){
+          df[r,k]=-df[r,k]
         }
       }
     #Si en cambio esa columna es un factor habra codigio extra
@@ -101,7 +104,98 @@ test_complete <- as.data.frame(lapply(raw_test,as.numeric))
 test_complete[,12] <- as.factor(test_complete[,12])
 colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
 test_complete <- limpiar2(test_complete)
+
+
+levels(train_complete$class) <- c("Benign","Malign")
+levels(test_complete$class) <- c("Benign","Malign")
+```
+
+Vamos a hacer las transformaciones de boxcox en las columnas que lo requieran
+
+```{r}
+
+transformaciones=function(df,firs_col,last_col){
+  for (columna in firs_col:last_col){
+    print(columna)
+    box=boxcox(df[,columna] ~1)
+    lambda=box$x[which.max(box$y)]
+    if (lambda <= -1.5){
+      df[,columna]=1/((df[,columna])^2)
+    }else if(lambda> -1.5 && lambda<= -0.75){
+      df[,columna]=1/df[,columna]
+    }else if (lambda> -0.75 && lambda<= -0.25){
+      df[,columna]=1 /sqrt(df[,columna])
+    }else if(lambda> -0.25 && lambda <= 0.25){
+      df[,columna]=log(df[,columna])
+    }else if (lambda> 0.25 && lambda <= 0.75){
+      df[,columna]=sqrt(df[,columna])
+    }else if (lambda> 0.75 && lambda <= 1.5){
+      df[,columna]=df[,columna]
+    }else if (lambda> 1.5 ){
+      df[,columna]=df[,columna]^2
+    }
+  }
+  return(df)
+}
+
+train_complete <- transformaciones(train_complete,2,11)
 ```
 
 
+
+Una vez que ya tenemos los datos limpios dividimos el dataset del train en tres grupos 
+
+```{r}
+## Ya hemos preparado los datos
+train_complete <- train_complete[sample(1:length(row_number(train_complete))),]
+
+tercio <- round(length(row_number(train_complete))/3)
+
+train_group1 <- train_complete[1:tercio,]
+train_group2 <- train_complete[(tercio+1):(tercio*2),]
+train_group3 <- train_complete[((tercio*2)+1):length(row_number(train_complete)),]
+
+```
+
+
+```{r}
+
+stepwise_down=function(df,prediccion){
+  i=1
+  formula=paste0(prediccion,"~")
+  resto_variables <-  colnames(df)[!(colnames(df)==prediccion)]
+  for (name in 1:(length(resto_variables))){
+    if (name==1){
+      formula=paste0(formula,resto_variables[name])
+    }else{
+      formula=paste(formula,resto_variables[name],sep="+")
+    }
+    
+  }
+  print(formula)
+  
+  for (step in 1:10){
+    print(step)
+    modelo=glm(formula,df,family=(binomial(link="logit")))
+    resumen=summary(modelo)
+    menos_influyente=rownames(resumen$coefficients)[resumen$coefficients[,4]==max(resumen$coefficients[,4])]
+    primero_en_formula=unlist(str_split(str_remove(formula,paste0(prediccion,"~")),pattern = "\\+"))[1]
+    print(primero_en_formula)
+    if(resumen$coefficients[,4][resumen$coefficients[,4]==max(resumen$coefficients[,4])]<0.05){
+      print("ya ha terminado el stepwise")
+      break
+    }
+    if (menos_influyente==primero_en_formula){
+      formula=str_remove(formula,paste0(menos_influyente,"\\+"))
+    }else{
+      formula=str_remove(formula,paste0("\\+",menos_influyente))
+    }
+    
+    
+  }
+  
+  return(modelo)
+}
+
+```
 
