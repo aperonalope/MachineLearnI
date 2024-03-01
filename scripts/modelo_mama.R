@@ -1,133 +1,75 @@
 library(tidyverse)
+library(ggplot2)
 library(dplyr)
 library(stringr)
 library(MASS)
+library(pROC)
+
 moda=function(vector){
   return(as.numeric(names(which.max(table(unique(vector))))))
 }
 
 factores=function(vector){
-  return(names(table(vector)[table(vector)>50]))
+  threshold=round(length(vector))/10
+  return(names(table(vector)[table(vector)>threshold]))
 }
 
-
 limpiar2=function(df){
+  #Este for iterara por las columnas del data frame
   for (k in 2:length(colnames(df))){
+    #Si la columna es numerica entra un for que itera por los datos de esa columna y cambia los datos si cumplen unas condiciones
     if (is.numeric(df[,k])==TRUE){
-      print("hola")
+      
       for (r in 1:length(row.names(df))){
+        #Si son NA los sustituye por la media de los valores de esa columna que no son NA.
         if (is.na(df[r,k])==1){
-          print("na")
+          
           df[r,k] <-round(mean(df[,k][is.na(df[,k])==0]))
+          #Si son mayores de 10 asumimos que el segundo numero es erroneo. Dividimos por 10 y redondeamos.
         }else if(df[r,k]>10){
-          print("mayor")
           df[r,k] <- round(df[r,k]/10)
+          #Si son menores de 0 las conviertes en positivo
         }else if (df[r,k]<0){
           df[r,k]=-df[r,k]
         }
       }
+      #Si en cambio esa columna es un factor habra codigio extra
     }else if(is.factor(df[,k])==TRUE){
-      levl=factores(df[,k])
-      df[,k] <- as.numeric(as.character(df[,k]))
-      print(df[,k])
       
-      print(levl)
+      #Sacaremos los valores unicos que superen mas de X counts, que asumimos que son los niveles adecuados de ese factor
+      levl=factores(df[,k])
+      
+      #transformamos en numerico la columna para poder operar
+      df[,k] <- as.numeric(as.character(df[,k]))
+      #El for itera por los valores de la columna
       for (r in 1:length(row.names(df))){
         if (is.na(df[r,k])==1){
-          print(1)
+          #Si es na lo sustituimos por la moda, ya que la media nos podria dar valores que no fuesen uno de los niveles
           df[r,k] <-moda(df[,k][is.na(df[,k])==0])
+          #Si es mayor de 10 dividimos por 10 y redondeamos igual que en el otro for
         }else if(df[r,k]>10){
-          print(2)
           df[r,k] <- round(df[r,k]/10)
+          #Si es un valor que no corresponde a los niveles del factor lo sustituyo por la moda
         }else if (!(df[r,k] %in% levl)){
-          print(3)
           df[r,k] = moda(df[,k][is.na(df[,k])==0])
         }
       }
+      #lo vuelvo a condertir en factor
       df[,k] <- as.factor(df[,k])
-      print(df[,k])
+      #le añado los niveles
+      
       levels(df[,k]) <- levl
+      
+      
     }
     
   }
-    
+  
   return(df)
 }
 
-raw_train=read.csv("./data/Breast_Cancer_train.data",sep="_",header = F)
-raw_test <- read.csv("./data/Breast_Cancer_test_completo.csv")
-
-
-train_complete <- raw_train %>% mutate_all(~ str_replace_all(., "h", ""))
-train_complete  <- as.data.frame(lapply(train_complete, as.numeric))
-train_complete[,12] <- as.factor(train_complete[,12])
-colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
-train_complete <- limpiar2(train_complete)
-
-test_complete <- as.data.frame(lapply(raw_test,as.numeric))
-test_complete[,12] <- as.factor(test_complete[,12])
-colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
-test_complete <- limpiar2(test_complete)
-
-## Ya tenemos los datos bien limpios
-
-
-levels(train_complete$class) <- c("Benign","Malign")
-levels(test_complete$class) <- c("Benign","Malign")
-
-
-
-## Ya hemos preparado los datos
-train_complete <- train_complete[sample(1:length(row_number(train_complete))),]
-
-tercio <- round(length(row_number(train_complete))/3)
-
-train_group1 <- train_complete[1:tercio,]
-train_group2 <- train_complete[(tercio+1):(tercio*2),]
-train_group3 <- train_complete[((tercio*2)+1):length(row_number(train_complete)),]
-
-stepwise_down=function(df,prediccion){
-  i=1
-  formula=paste0(prediccion,"~")
-  resto_variables <-  colnames(df)[!(colnames(df)==prediccion)]
-  for (name in 1:(length(resto_variables))){
-    if (name==1){
-      formula=paste0(formula,resto_variables[name])
-    }else{
-      formula=paste(formula,resto_variables[name],sep="+")
-    }
-    
-  }
-  print(formula)
-  
-  for (step in 1:10){
-    print(step)
-    modelo=glm(formula,df,family=(binomial(link="logit")))
-    resumen=summary(modelo)
-    menos_influyente=rownames(resumen$coefficients)[resumen$coefficients[,4]==max(resumen$coefficients[,4])]
-    primero_en_formula=unlist(str_split(str_remove(formula,paste0(prediccion,"~")),pattern = "\\+"))[1]
-    print(primero_en_formula)
-    if(resumen$coefficients[,4][resumen$coefficients[,4]==max(resumen$coefficients[,4])]<0.05){
-      print("ya ha terminado el stepwise")
-      break
-    }
-    if (menos_influyente==primero_en_formula){
-      formula=str_remove(formula,paste0(menos_influyente,"\\+"))
-    }else{
-      formula=str_remove(formula,paste0("\\+",menos_influyente))
-    }
-    
-    
-  }
-  
-  return(modelo)
-}
-
-
-
 transformaciones=function(df,firs_col,last_col){
   for (columna in firs_col:last_col){
-    print(columna)
     box=boxcox(df[,columna] ~1)
     lambda=box$x[which.max(box$y)]
     if (lambda <= -1.5){
@@ -150,15 +92,180 @@ transformaciones=function(df,firs_col,last_col){
 }
 
 
-lambda= -3
-r=switch(lambda,
-       lambda < -1.5,{
-         lambda=lambda*3
-       },
-       (lambda >-1.5 && lambda<=0.75),{
-         lambda=lambda*3
-       }
-       
-       
-)
+stepwise_down=function(df,prediccion,p_value_threshold=0.05){
+  i=1
+  formula=paste0(prediccion,"~")
+  resto_variables <-  colnames(df)[!(colnames(df)==prediccion)]
+  for (name in 1:(length(resto_variables))){
+    if (name==1){
+      formula=paste0(formula,resto_variables[name])
+    }else{
+      formula=paste(formula,resto_variables[name],sep="+")
+    }
+    
+  }
+  
+  for (step in 1:10){
+    
+    modelo=glm(formula,df,family=(binomial(link="logit")))
+    resumen=summary(modelo)
+    lista=(2:length(rownames(resumen$coefficients)))
+    resumen=resumen$coefficients[lista,]
+    menos_influyente=rownames(resumen)[resumen[,4]==max(resumen[,4])]
+    primero_en_formula=unlist(str_split(str_remove(formula,paste0(prediccion,"~")),pattern = "\\+"))[1]
+    if(resumen[,4][resumen[,4]==max(resumen[,4])]<p_value_threshold){
+      
+      break
+    }
+    if (menos_influyente==primero_en_formula){
+      formula=str_remove(formula,paste0(menos_influyente,"\\+"))
+    }else{
+      formula=str_remove(formula,paste0("\\+",menos_influyente))
+    }
+    
+    
+  }
+  return(modelo)
+}
+
+estadisticas=function(df,col_test,col_predic,variable_positive,variable_negative){
+  tabla=table(df[,col_test],df[,col_predic],dnn = c("true_value","predicction"))
+  true_positives=tabla[variable_positive,variable_positive]+tabla[variable_positive,variable_negative]
+  true_negative=tabla[variable_negative,variable_negative]+tabla[variable_negative,variable_positive]
+  false_positive=tabla[variable_negative,variable_positive]
+  false_negative=tabla[variable_positive,variable_negative]
+  
+  sensitivity=round((true_positives/(true_positives+false_negative))*100,2)
+  specificity=round((true_negative/(true_negative+false_positive))*100,2)
+  PPV=round((true_positives/(true_positives+false_positive))*100,2)
+  NPV=round((true_negative/(true_negative+false_negative))*100,2)
+  FPR=round((false_positive/(false_positive+true_negative))*100,2)
+  FNR=round((false_negative/(false_negative+true_positives))*100,2)
+  
+  Accuracy=round(((true_positives+true_negative)/(true_negative+true_positives+false_negative+false_positive))*100,2)
+  
+  print(tabla)
+  print(paste0("Sensitivity: ",sensitivity,"%"))
+  print(paste0("Specificity: ",specificity,"%"))
+  print(paste0("Positive Predictive Value: ", PPV,"%"))
+  print(paste0("Negative Predictive Value: ",NPV,"%"))
+  print(paste0("False Positive Rate: ",FPR,"%"))
+  print(paste0("False Negative Rate: ",FNR,"%"))
+  print(paste0("Accuracy: ",Accuracy,"%"))
+  data=data.frame(sensitivity,specificity,PPV,NPV,FPR,FNR,Accuracy)
+  row.names(data)="%"
+  return(t(data))
+}
+
+ROC=function(df,col_test,col_predic,variable_positive,variable_negative){
+  sens=vector()
+  FPR=vector()
+  thresh=vector()
+  for(threshold in seq(0,1,0.01)){
+    dataframe=df
+    dataframe[,col_predic]=ifelse(dataframe[,col_predic]<=threshold,0,1)
+    dataframe[,col_predic]=as.factor( dataframe[,col_predic])
+    levels( dataframe[,col_predic]) <- c(variable_positive,variable_negative)
+    
+    esta=estadisticas(dataframe,col_test,col_predic,variable_positive,variable_negative)
+    thresh=append(thresh,threshold)
+    sens=append(sens,esta[1,])
+    FPR=append(FPR,esta[5,])
+    
+  }
+  resultados=as.data.frame(cbind(thresh,sens,FPR))
+  return(resultados)
+}
+
+
+
+setwd("/home/alvaro/Documentos/rstudio/MachineLearnI/")
+raw_train=read.csv("./data/Breast_Cancer_train.data",sep = "_",header = FALSE)
+raw_test <- read.csv("./data/Breast_Cancer_test_completo.csv")
+
+
+#Arreglamos el train dataset
+train_complete <- raw_train %>% mutate_all(~ str_replace_all(., "h", ""))
+train_complete  <- as.data.frame(lapply(train_complete, as.numeric))
+train_complete[,12] <- as.factor(train_complete[,12])
+colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
+train_complete <- limpiar2(train_complete)
+
+#Arreglamos el test dataset
+test_complete <- as.data.frame(lapply(raw_test,as.numeric))
+test_complete[,12] <- as.factor(test_complete[,12])
+colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
+test_complete <- limpiar2(test_complete)
+
+
+levels(train_complete$class) <- c("Benign","Malign")
+levels(test_complete$class) <- c("Benign","Malign")
+
+
+train_complete_norm <- transformaciones(train_complete,2,11)
+
+train_long <- gather(train_complete, key = "variable", value = "value", -ID,-class)
+train_long_norm <- gather(train_complete_norm, key = "variable", value = "value", -ID,-class)
+
+ggplot(train_long, aes(x=variable, y=value)) + geom_boxplot() + facet_wrap(~variable, scales = "free")
+ggplot(train_long_norm, aes(x=variable, y=value)) + geom_boxplot() + facet_wrap(~variable, scales = "free")
+
+
+
+train_complete_norm <- train_complete_norm[sample(1:length(row_number(train_complete))),]
+
+tercio <- round(length(row_number(train_complete_norm))/3)
+
+train_group1 <- train_complete_norm[1:tercio,]
+train_group2 <- train_complete_norm[(tercio+1):(tercio*2),]
+train_group3 <- train_complete_norm[((tercio*2)+1):length(row_number(train_complete)),]
+
+train_1=rbind(train_group1,train_group2)
+test_1=train_group3
+
+train_2=rbind(train_group1,train_group3)
+test_2=train_group2
+
+train_3=rbind(train_group3,train_group2)
+test_3=train_group1
+
+
+modelo1=stepwise_down(train_1,"class")
+modelo2=stepwise_down(train_2,"class")
+modelo3=stepwise_down(train_3,"class")
+
+
+print(summary(modelo1)$coefficients)
+print(summary(modelo2)$coefficients)
+print(summary(modelo3)$coefficients)
+
+prediccion1=as.factor(round(predict(modelo1,test_1,type="response")))
+levels(prediccion1) <- c("Benign","Malign")
+prediccion2=as.factor(round(predict(modelo2,test_2,type="response")))
+levels(prediccion2) <- c("Benign","Malign")
+prediccion3=as.factor(round(predict(modelo3,test_3,type="response")))
+levels(prediccion3) <- c("Benign","Malign")
+
+comparacion1 <- cbind(test_1,prediccion1)
+comparacion1[!(comparacion1$class==comparacion1$prediccion1),]
+
+comparacion2<- cbind(test_2,prediccion2)
+comparacion2[!(comparacion2$class==comparacion2$prediccion2),]
+
+comparacion3 <- cbind(test_3,prediccion3)
+comparacion3[!(comparacion3$class==comparacion3$prediccion3),]
+
+
+
+modelo_final=stepwise_down(train_complete_norm,"class",p_value_threshold = 0.05)
+summary(modelo_final)
+test_complete <- transformaciones(test_complete,2,11)
+prediccion_final=predict(modelo_final,test_complete,type="response")
+levels(prediccion_final) <- c("Benign","Malign")
+
+comparacion_final <- cbind(test_complete,prediccion_final)
+
+comparacion_final[,"prediccion_final"]=as.factor(ifelse(comparacion_final[,"prediccion_final"]<=0.1,0,1))
+levels(comparacion_final[,"prediccion_final"])=c("Benign","Malign")
+estats3=estadisticas(comparacion_final,"class","prediccion_final","Benign","Malign")
 
