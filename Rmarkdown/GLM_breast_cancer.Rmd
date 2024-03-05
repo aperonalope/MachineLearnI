@@ -1,10 +1,13 @@
 ---
-title: "GLM for por prediction of breast cancer malignancy"
+title: "Modelo Lineal Generalizado para la prediccion de cancer de mama"
 author: "Alvaro Perona"
 date: "2024-02-27"
-output: html_document
+output: 
+  html_document:
+    css: "style.css"
 ---
-```{r}
+Cargamos las librerias que vamos a usar en el script
+```{r echo=TRUE, message=FALSE}
 library(tidyverse)
 library(ggplot2)
 library(dplyr)
@@ -13,21 +16,23 @@ library(MASS)
 library(pROC)
 ```
 
-Cargamos los datos de entreno y los datos de testeo
+Cargamos los datos con los que vamos a entrenar el modelo y los datos con los que vamos a testear ese modelo
+
 ```{r}
-setwd("/home/alvaro/Documentos/rstudio/MachineLearnI/")
-raw_train=read.csv("./data/Breast_Cancer_train.data",sep = "_",header = FALSE)
-raw_test <- read.csv("./data/Breast_Cancer_test_completo.csv")
+raw_train=read.csv("../data/Breast_Cancer_train.data",sep = "_",header = FALSE)
+raw_test <- read.csv("../data/Breast_Cancer_test_completo.csv")
 ```
 
-Creamos una funcionq que saca la mediana de unos datos y otra que saque la lista de valores unicos que superen mas de x counts. Seran necesarias mas adelante
+Creamos una función que saque la mediana de unos datos y otra que saque la lista de valores únicos que superen mas de x counts. Serán necesarias mas adelante para imputar ciertos valores.
+
 ```{r}
 #Funcion para extraer moda de un vector
 moda=function(vector){
   return(as.numeric(names(which.max(table(unique(vector))))))
 }
 
-#Funcion para 
+#Funcion para sacar los valores unicos que de un factor que superen mas del 10% de los valores totales, los cuales
+#consideraremos como los autenticos valores del factor
 factores=function(vector){
   threshold=round(length(vector))/10
   return(names(table(vector)[table(vector)>threshold]))
@@ -35,13 +40,27 @@ factores=function(vector){
 
 ```
 
-Creamos una funcion donde los NAs sean sustituidos por el valor promedio entero de esa columna y si hay un valor superior a 10, este sea divididdo entre 10 y redondeamos al numero entero hacia abajo, ya que suponemos que el ultimo numero sobra y se ha introducido por error.
+Ahora vamos a crear una función que nos limpie un dataframe. La función toma en cuenta una serie de situaciones donde los datos estén mal y aplica la corrección mas lógica. Si el tipo de valor de la columna es numérico:
+<br>-Los NAs son sustituidos por el valor promedio entero de esa columna.
+<br>-Los valores que sean superiores a 10 sean dividido entre 10 y redondeados a un numero entero, ya que suponemos que el ultimo numero sobra y se ha introducido por error. 
+<br>-Si el valor es negativo, lo convertimos en positivo. En el caso de que sea
+<br>
+<br>
+Si el tipo de valor de la columna es un factor, primero se extraen los valores correspondientes a los verdaderos niveles del factor y la columna se transforma a numérica para poder aplicar operaciones:
+<br>-Los NAs son sustituidos por el valor de moda de esa columna.
+<br>-Los valores que sean superiores a 10 sean dividido entre 10 y redondeados a un numero entero.
+<br>- Si el valor no esta entre los niveles del factor lo sustituimos por el valor de moda.
+<br>Tras hacer las correcciones lo volvemos a convertir en factor.
+
 ```{r}
 
-limpiar2=function(df){
+limpiar2=function(df,target){
+  #Este vector almacenara filas que luego eliminaremos
+  eliminar=vector()
   #Este for iterara por las columnas del data frame
   for (k in 2:length(colnames(df))){
-    #Si la columna es numerica entra un for que itera por los datos de esa columna y cambia los datos si cumplen unas condiciones
+    #Si la columna es numerica entra un for que itera por los datos de esa columna y cambia los datos si cumplen 
+    #unas condiciones
     if (is.numeric(df[,k])==TRUE){
 
       for (r in 1:length(row.names(df))){
@@ -60,7 +79,8 @@ limpiar2=function(df){
     #Si en cambio esa columna es un factor habra codigio extra
     }else if(is.factor(df[,k])==TRUE){
 
-      #Sacaremos los valores unicos que superen mas de X counts, que asumimos que son los niveles adecuados de ese factor
+      #Sacaremos los valores unicos que superen mas de X counts, que asumimos que son los niveles adecuados de 
+      #ese factor
       levl=factores(df[,k])
 
       #transformamos en numerico la columna para poder operar
@@ -68,108 +88,103 @@ limpiar2=function(df){
       #El for itera por los valores de la columna
       for (r in 1:length(row.names(df))){
         if (is.na(df[r,k])==1){
-          #Si es na lo sustituimos por la moda, ya que la media nos podria dar valores que no fuesen uno de los niveles
+          #Si es na lo sustituimos por la moda, ya que la media nos podria dar valores que no fuesen uno de los
+          #niveles
           df[r,k] <-moda(df[,k][is.na(df[,k])==0])
           #Si es mayor de 10 dividimos por 10 y redondeamos igual que en el otro for
         }else if(df[r,k]>10){
           df[r,k] <- round(df[r,k]/10)
-          #Si es un valor que no corresponde a los niveles del factor lo sustituyo por la moda
+          #Si es un valor que no corresponde a los niveles del factor lo sustituyo por la moda.Si esa columna es el factor que queremos predecir la metemos el la lista de                 #eliminar ya que imputar tu target no seria adecuado
         }else if (!(df[r,k] %in% levl)){
-          df[r,k] = moda(df[,k][is.na(df[,k])==0])
+          df[r,k] <-moda(df[,k][is.na(df[,k])==0])
+          if (colnames(df)[k]==target){
+            eliminar=append(eliminar,r) 
+          }
+         
         }
       }
-      #lo vuelvo a condertir en factor
+      #lo vuelvo a convertir en factor
       df[,k] <- as.factor(df[,k])
       #le añado los niveles
-
       levels(df[,k]) <- levl
-  
       
     }
     
   }
+  
+  df=df[!(seq(1,length(rownames(df))) %in% eliminar),]
     
   return(df)
 }
 
 ```
 
-Leemos los datasets de train y test y tranformamos las columnas a su tipo de dato correspondiente. En el caso del train tambien hay que eliminar el caracter h. Por ultimo les damos nombre a las columnas
-```{r}
+Leemos los datasets de train y test y transformamos las columnas a su tipo de dato correspondiente. En el caso del train también hay que eliminar el carácter "h" que esta presente junto a todos los valores de la tabla. No hace falta escalar los valores de las columnas porque todos van de 1 a 10 menos el del grupo, que no sera relevante en el modelo.Por ultimo les damos nombre a las columnas.
+```{r warning=FALSE}
 #Arreglamos el train dataset
 train_complete <- raw_train %>% mutate_all(~ str_replace_all(., "h", ""))
 train_complete  <- as.data.frame(lapply(train_complete, as.numeric))
 train_complete[,12] <- as.factor(train_complete[,12])
 colnames(train_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
-train_complete <- limpiar2(train_complete)
+train_complete <- limpiar2(train_complete,"class")
 
 #Arreglamos el test dataset
 test_complete <- as.data.frame(lapply(raw_test,as.numeric))
 test_complete[,12] <- as.factor(test_complete[,12])
 colnames(test_complete)=c("ID","clump_thickness","unif_cell_size","unif_cell_shape","Marg_adhes","Epith_cell_size","Bare_nucl","Bland_chrom","Normal_nucleoli","Mitoses","Group","class")
-test_complete <- limpiar2(test_complete)
+test_complete <- limpiar2(test_complete,"class")
 
-
+#Les cambiamos los niveles a las columnas del factor "class"
 levels(train_complete$class) <- c("Benign","Malign")
 levels(test_complete$class) <- c("Benign","Malign")
-```
-
-Vamos a hacer las transformaciones de boxcox en las columnas que lo requieran
-
-```{r}
-
-transformaciones=function(df,firs_col,last_col){
-  for (columna in firs_col:last_col){
-    box=boxcox(df[,columna] ~1)
-    lambda=box$x[which.max(box$y)]
-    print(paste(colnames(df)[columna],lambda))
-    if (lambda <= -1.5){
-      df[,columna]=1/((df[,columna])^2)
-    }else if(lambda> -1.5 && lambda<= -0.75){
-      df[,columna]=1/df[,columna]
-    }else if (lambda> -0.75 && lambda<= -0.25){
-      df[,columna]=1 /sqrt(df[,columna])
-    }else if(lambda> -0.25 && lambda <= 0.25){
-      df[,columna]=log(df[,columna])
-    }else if (lambda> 0.25 && lambda <= 0.75){
-      print("sqrt")
-      df[,columna]=sqrt(df[,columna])
-    }else if (lambda> 0.75 && lambda <= 1.5){
-      df[,columna]=df[,columna]
-    }else if (lambda> 1.5 ){
-      df[,columna]=df[,columna]^2
-    }
-  }
-  return(df)
-}
-
-train_complete_norm <- transformaciones(train_complete,2,11)
-```
-Vemos que las variables tras hacer las transformaciones tienen una distribucion mas normal
-```{r}
-train_long <- gather(train_complete, key = "variable", value = "value", -ID,-class)
-train_long_norm <- gather(train_complete_norm, key = "variable", value = "value", -ID,-class)
-
-ggplot(train_long, aes(x=variable, y=value)) + geom_boxplot() + facet_wrap(~variable, scales = "free")+ggtitle("before boxcox")+theme(plot.title = element_text(hjust = 0.5, size = 24))
-ggplot(train_long_norm, aes(x=variable, y=value)) + geom_boxplot() + facet_wrap(~variable, scales = "free") +ggtitle("after boxcox")+theme(plot.title = element_text(hjust = 0.5, size = 24))
 
 ```
 
 
 
 
-Una vez que ya tenemos los datos limpios dividimos el dataset del train en tres grupos 
+
+
+
+
+Vamos a explorar visualmente los datos y ver si la distribución es mas o menos normal y si hay diferencias entre las variables en función si la muestra es maligna o benigna. Vemos que exceptuando la variable de grupo, el resto de variables tienen valores diferentes en función de la clase de tumor. De manera visual parece que los datos no son normales, pero no se pueden las transformaciones boxcox tampoco reusltan en una distribución normal asi que vamos a dejarlos así.
+
+
+```{r message=FALSE, warning=FALSE}
+#Transformamos en formato long todas las variables menos "class"
+train_long <- train_complete %>% dplyr::select(,-ID) %>% pivot_longer(cols=colnames(train_complete)[colnames(train_complete)!=c("ID","class")],names_to = "variable")
+
+#Hacemos un grid con un boxplot para cada variable comparando las muestras "malign" y "benign"
+distribucion_datos <- ggplot(train_long, aes(x=value,y=class)) +
+  geom_boxplot()+
+  facet_wrap(~variable, scales = "free",)+
+  ggtitle("Distribucion de los Datos")+
+  ylab("")+
+  xlab("")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5, size = 24),plot.background = element_rect(rgb(255, 238, 245 , maxColorValue = 255)),)
+
+png(filename = "../graphs/data_distribution.png",units = "cm",height = 15,width = 20,res = 500)
+distribucion_datos
+dev.off()
+distribucion_datos
+```
+
+
+Una vez que ya tenemos los datos limpios y hemos analizado su distribución podemos empezar a realizar el modelo. Primero vamos a hacer una cross-validation. Barajamos las filas del dataframe y lo dividimos en tres partes. Luego hacemos las distintas combinaciones de esas tres partes para los distintos grupos de entreno y testeo para el cross-validation
 
 ```{r}
-## Ya hemos preparado los datos
-train_complete_norm <- train_complete_norm[sample(1:length(row_number(train_complete))),]
+## Barajamos las filas del dataframe
+train_complete<- train_complete[sample(1:length(row_number(train_complete))),]
 
-tercio <- round(length(row_number(train_complete_norm))/3)
+tercio <- round(length(row_number(train_complete))/3)
 
-train_group1 <- train_complete_norm[1:tercio,]
-train_group2 <- train_complete_norm[(tercio+1):(tercio*2),]
-train_group3 <- train_complete_norm[((tercio*2)+1):length(row_number(train_complete)),]
+##Dividimos el dataframe el tres partes con el mismo numero de filas
+train_group1 <- train_complete[1:tercio,]
+train_group2 <- train_complete[(tercio+1):(tercio*2),]
+train_group3 <- train_complete[((tercio*2)+1):length(row_number(train_complete)),]
 
+#Hacemos los distintos grupos para el cross validation
 train_1=rbind(train_group1,train_group2)
 test_1=train_group3
 
@@ -180,11 +195,13 @@ train_3=rbind(train_group3,train_group2)
 test_3=train_group1
 ```
 
+Hacemos una función a la que introducimos un dataframe, una variable que queremos predecir y un p-value de threshold y nos haga el stepwise down hasta que nos quedemos únicamente con las variables significativas.
 
 ```{r}
-
+#El pvalue threshold por defecto es 0.05 pero se puede cambiar
 stepwise_down=function(df,prediccion,p_value_threshold=0.05){
   i=1
+  #Esta parte crea la formula inicial que se usara en el glm
   formula=paste0(prediccion,"~")
   resto_variables <-  colnames(df)[!(colnames(df)==prediccion)]
   for (name in 1:(length(resto_variables))){
@@ -196,94 +213,62 @@ stepwise_down=function(df,prediccion,p_value_threshold=0.05){
     
   }
   
-  for (step in 1:10){
-
+  #Inicializamos el for donde iremos quitando creando un glm y quitando la variable menos significativa en cada bucle
+  for (step in 1:100){
+    #Hacemos el glm
     modelo=glm(formula,df,family=(binomial(link="logit")))
     resumen=summary(modelo)
     lista=(2:length(rownames(resumen$coefficients)))
+    #Quitamos el intercept del dataframe.
     resumen=resumen$coefficients[lista,]
+    #Aislamos la variable con mayor p_value
     menos_influyente=rownames(resumen)[resumen[,4]==max(resumen[,4])]
+    #Aislamos la primera variable de la formula
     primero_en_formula=unlist(str_split(str_remove(formula,paste0(prediccion,"~")),pattern = "\\+"))[1]
+    #Si el p_value de la variable menos influyente es menor del threshold establecido se sale del for y se termina la funcion
     if(resumen[,4][resumen[,4]==max(resumen[,4])]<p_value_threshold){
       
       break
     }
+    #Si la menos influyente es la primera la quitamos de la formula
     if (menos_influyente==primero_en_formula){
       formula=str_remove(formula,paste0(menos_influyente,"\\+"))
+    #Si no es la primera la quitamos de una manera ligeramente distinta
     }else{
       formula=str_remove(formula,paste0("\\+",menos_influyente))
     }
     
     
   }
+  #Devolvemos el modelo glm 
   return(modelo)
 }
 
 ```
-
-Hacemos el stepwise de los tres grupos en los que hemos dividido el traind dataset y los testeamos
-
-```{r}
-modelo1=stepwise_down(train_1,"class")
-modelo2=stepwise_down(train_2,"class")
-modelo3=stepwise_down(train_3,"class")
-
-
-print(summary(modelo1)$coefficients)
-print(summary(modelo2)$coefficients)
-print(summary(modelo3)$coefficients)
-
-prediccion1=as.factor(round(predict(modelo1,test_1,type="response")))
-levels(prediccion1) <- c("Benign","Malign")
-prediccion2=as.factor(round(predict(modelo2,test_2,type="response")))
-levels(prediccion2) <- c("Benign","Malign")
-prediccion3=as.factor(round(predict(modelo3,test_3,type="response")))
-levels(prediccion3) <- c("Benign","Malign")
-
-comparacion1 <- cbind(test_1,prediccion1)
-comparacion1[!(comparacion1$class==comparacion1$prediccion1),]
-
-comparacion2<- cbind(test_2,prediccion2)
-comparacion2[!(comparacion2$class==comparacion2$prediccion2),]
-
-comparacion3 <- cbind(test_3,prediccion3)
-comparacion3[!(comparacion3$class==comparacion3$prediccion3),]
-
-
-
-
-
-```
-```{r}
-modelo_final=stepwise_down(train_complete_norm,"class",p_value_threshold = 0.05)
-summary(modelo_final)
-test_complete <- transformaciones(test_complete,2,11)
-prediccion_final=predict(modelo_final,test_complete,type="response")
-levels(prediccion_final) <- c("Benign","Malign")
-
-comparacion_final <- cbind(test_complete,prediccion_final)
-
-
-```
-
+Hacemos una función a la que tu le metas un dataframe, la variable que queremos predecir, la variable con las predicciones, que se considera "positive" y que "negative" y la función te devuelva las estadísticas clásicas de un test diagnostico
 
 ```{r message=FALSE, include=FALSE}
-estadisticas=function(df,col_test,col_predic,variable_positive,variable_negative){
+
+estadisticas=function(df,col_test,col_predic,variable_positive,variable_negative,show=TRUE){
+  #Extramos una tabla con el numero de Benign y Malign en la columna de la variable que queremos predecir y el numero de la columna con las predicciones
   tabla=table(df[,col_test],df[,col_predic],dnn = c("true_value","predicction"))
-  true_positives=tabla[variable_positive,variable_positive]+tabla[variable_positive,variable_negative]
-  true_negative=tabla[variable_negative,variable_negative]+tabla[variable_negative,variable_positive]
+  #Extramos los tipos de resultados de la tabla
+  true_positives=tabla[variable_positive,variable_positive]
+  true_negative=tabla[variable_negative,variable_negative]
   false_positive=tabla[variable_negative,variable_positive]
   false_negative=tabla[variable_positive,variable_negative]
   
+  #Calculamos las estadisticas
   sensitivity=round((true_positives/(true_positives+false_negative))*100,2)
   specificity=round((true_negative/(true_negative+false_positive))*100,2)
   PPV=round((true_positives/(true_positives+false_positive))*100,2)
   NPV=round((true_negative/(true_negative+false_negative))*100,2)
   FPR=round((false_positive/(false_positive+true_negative))*100,2)
   FNR=round((false_negative/(false_negative+true_positives))*100,2)
-
   Accuracy=round(((true_positives+true_negative)/(true_negative+true_positives+false_negative+false_positive))*100,2)
   
+  if (show==TRUE){
+  #Hacemos el display de las estadisticas
   print(tabla)
   print(paste0("Sensitivity: ",sensitivity,"%"))
   print(paste0("Specificity: ",specificity,"%"))
@@ -292,41 +277,168 @@ estadisticas=function(df,col_test,col_predic,variable_positive,variable_negative
   print(paste0("False Positive Rate: ",FPR,"%"))
   print(paste0("False Negative Rate: ",FNR,"%"))
   print(paste0("Accuracy: ",Accuracy,"%"))
+  }
+  
+  #Agrupamos las estaditicas en un dataframe y lo devolvemos
   data=data.frame(sensitivity,specificity,PPV,NPV,FPR,FNR,Accuracy)
   row.names(data)="%"
   return(t(data))
 }
 
+```
+
+También creamos una función ROC que nos calcule la sensibilidad y el False Positive Rate para distintos cutoff valúes para clasificar un tumor como "Malign". Esto nos ayudara a seleccionar el mejor cut-off valué para el modelo y también nos dará una idea de lo eficaz que es el modelo a la hora de diagnosticar.
+```{r}
 ROC=function(df,col_test,col_predic,variable_positive,variable_negative){
+  
+  #Creamos vectores que almacenen la sensibilidad el FPR y el cutoff value en cada iteration del for
   sens=vector()
   FPR=vector()
   thresh=vector()
+  #Cremos un for donde el cutoff value vaya incrementando de 0 a 1 en pasos de 0.01
   for(threshold in seq(0,1,0.01)){
     dataframe=df
+    #Transformamos la columna de de predicciones que tiene probabilidades de 0 a 1 en "Benign" y "Malign" en base a si esa probabilidad supera el cutoff value
     dataframe[,col_predic]=ifelse(dataframe[,col_predic]<=threshold,0,1)
     dataframe[,col_predic]=as.factor( dataframe[,col_predic])
-    levels( dataframe[,col_predic]) <- c(variable_positive,variable_negative)
-    
-    esta=estadisticas(dataframe,col_test,col_predic,variable_positive,variable_negative)
+    levels( dataframe[,col_predic]) <- c(variable_negative,variable_positive)
+    #Sacamos las estadisticas de ese dataframe
+    esta=estadisticas(dataframe,col_test,col_predic,variable_positive,variable_negative,show=FALSE)
+    #Metemos las estadisticas y el cutoff en los vectores
     thresh=append(thresh,threshold)
     sens=append(sens,esta[1,])
     FPR=append(FPR,esta[5,])
     
   }
+  #Combinamos los vectores en un data frame y lo devolvemos
   resultados=as.data.frame(cbind(thresh,sens,FPR))
   return(resultados)
 }
-roc=ROC(comparacion_final,"class","prediccion_final","Benign","Malign")
-ggplot(roc,aes(x=FPR,y=sens))+geom_line()
 ```
 
-```{r}
-ggplot(roc,aes(x=FPR,y=sens))+geom_line()
-comparacion_final[,"prediccion_final"]=as.factor(ifelse(comparacion_final[,"prediccion_final"]<=0.16,0,1))
-levels(comparacion_final[,"prediccion_final"])=c("Benign","Malign")
-estats=estadisticas(comparacion_final,"class","prediccion_final","Benign","Malign")
 
-```   
+
+Hacemos el stepwise de los tres grupos en los que hemos dividido el train dataset y los testeamos. Si el modelo funciona bien y no hace overfiting de los datos los resultados de las predicciones de los distintos sets de cross validation deberían ser similares. Vemos que las estadísticas son muy parecidas por lo que el modelo no hace overfitting y es adecuado.
+
+```{r warning=FALSE}
+#Sacamos el modelo de cada grupo de entrenamiento
+modelo1=stepwise_down(train_1,"class")
+modelo2=stepwise_down(train_2,"class")
+modelo3=stepwise_down(train_3,"class")
+
+
+#Hacemos las predicciones y las redondeamos a 0 o 1 y les asignamos el nivel.
+prediccion1=as.factor(round(predict(modelo1,test_1,type="response")))
+levels(prediccion1) <- c("Benign","Malign")
+prediccion2=as.factor(round(predict(modelo2,test_2,type="response")))
+levels(prediccion2) <- c("Benign","Malign")
+prediccion3=as.factor(round(predict(modelo3,test_3,type="response")))
+levels(prediccion3) <- c("Benign","Malign")
+
+#Sacamos las estadisticas
+comparacion1 <- cbind(test_1,prediccion1)
+estadisticas_cv1 <- estadisticas(comparacion1,"class","prediccion1","Malign","Benign",show=FALSE)
+
+comparacion2<- cbind(test_2,prediccion2)
+estadisticas_cv2 <- estadisticas(comparacion2,"class","prediccion2","Malign","Benign",show=FALSE)
+
+
+comparacion3 <- cbind(test_3,prediccion3)
+estadisticas_cv3 <- estadisticas(comparacion3,"class","prediccion3","Malign","Benign",show=FALSE)
+
+print(cbind(estadisticas_cv1,estadisticas_cv2,estadisticas_cv3))
+
+
+
+
+
+
+```
+
+
+Ahora hacemos el modelo con todo el training dataset y hacemos la prediccion del test dataset.
+
+```{r}
+#Hacemos el stepwise y obtenemos el modelo
+modelo_final=stepwise_down(train_complete,"class",p_value_threshold = 0.05)
+summary(modelo_final)
+#Predecimos si el tumor es maligno o no con los datos del test dataset
+prediccion_final=predict(modelo_final,test_complete,type="response")
+levels(prediccion_final) <- c("Benign","Malign")
+#Esas predicciones las juntamos con el dataframe del test dataset
+comparacion_final <- cbind(test_complete,prediccion_final)
+
+#Con el objetivo de plotear las probabilidades que hemos predecido ordenamos el dataframe en funcion de esa columna
+comparacion_final <- comparacion_final[order(comparacion_final$prediccion_final),]
+comparacion_final <- cbind(comparacion_final,seq(1,length(rownames(comparacion_final))))
+colnames(comparacion_final)[14] <- "indice"
+#Ploteamos la columna de las predicciones
+DIST=ggplot(comparacion_final,aes(x=indice,y=prediccion_final))+geom_point()+ylab("Valores")+xlab("Datos de predicción")+theme_bw()+theme(axis.title.x = element_text(size = 18),axis.title.y = element_text(size = 18),axis.text.x =element_text(size = 14),axis.text.y =element_text(size = 14),plot.background = element_rect(rgb(255, 238, 245 , maxColorValue = 255)))
+png(filename = "../graphs/prediccion_distribucion.png",units = "cm",height = 15,width = 20,res = 500)
+DIST
+dev.off()
+DIST
+
+```
+
+
+
+
+Vamos a hacer el ROC para hacernos una idea de lo bien que funciona el modelo y elegir un cutoff value adecuado para obtener una sensibilidad del 100%, ya que en caso de enfermedades tan graves es mejor diagnosticar erróneamente a alguien pero detectar el 100% de los casos.
+
+```{r warning=FALSE}
+#Hacemos el ROC y lo ploteamos
+roc=ROC(comparacion_final,"class","prediccion_final","Malign","Benign")
+#Ordenamos el dataframe en funcion de la sensibilidad
+roc=roc[order(roc$sens),]
+#Ploteamos la sensibilidad contra el FPR
+ROC=ggplot(roc,aes(x=FPR,y=sens))+geom_point()+geom_line()+ylab("Sensibilidad")+
+  geom_text(aes(label = "Cutoff:0.24"), x = 5, y = 90, hjust = -0.2, vjust = 0.5,size=8)+ggtitle("ROC")+
+  geom_curve(aes(x = 5, y = 90, xend = 4.4, yend = 100), 
+             curvature = -0.2, 
+             arrow = arrow(length = unit(0.2, "inches")))+
+  theme_bw()+
+  theme(axis.title.x = element_text(size = 18),axis.title.y = element_text(size = 18),axis.text.x =element_text(size = 14),axis.text.y =element_text(size = 14),plot.title = element_text(hjust = 0.5,size=20),plot.background = element_rect(rgb(255, 238, 245 , maxColorValue = 255)))
+png(filename = "../graphs/ROC.png",units = "cm",height = 15,width = 20,res = 500)
+ROC
+dev.off()
+ROC
+#Vemos que el cutoff mas alto que tiene un 100% de sensibilidad es 0.24
+cutoff=max(roc[roc$sens==100,][,1])
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+Ahora con ese cutoff value redondeamos las probabilidades de la prediccion y calculamos las estadisticas de nuestro modelo.
+```{r}
+#Sacamos las estadisticas del modelo con el cutoff value de 0.24
+comparacion_final[,"prediccion_final"]=as.factor(ifelse(comparacion_final[,"prediccion_final"]<=cutoff,0,1))
+levels(comparacion_final[,"prediccion_final"])=c("Benign","Malign")
+estats=estadisticas(comparacion_final,"class","prediccion_final","Malign","Benign",show=FALSE)
+print(estats)
+
+
+
+```  
+
+
+
+
+
+
+
+
+
 
 
 
