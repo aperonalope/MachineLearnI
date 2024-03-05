@@ -111,7 +111,7 @@ limpiar2=function(df,target){
     }
     
   }
-  
+  #Eliminamos las columnas del vector
   df=df[!(seq(1,length(rownames(df))) %in% eliminar),]
     
   return(df)

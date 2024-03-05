@@ -465,7 +465,7 @@ las correcciones lo volvemos a convertir en factor.</p>
     }
     
   }
-  
+  #Eliminamos las columnas del vector
   df=df[!(seq(1,length(rownames(df))) %in% eliminar),]
     
   return(df)
@@ -660,13 +660,13 @@ estadisticas_cv3 &lt;- estadisticas(comparacion3,&quot;class&quot;,&quot;predicc
 
 print(cbind(estadisticas_cv1,estadisticas_cv2,estadisticas_cv3))</code></pre>
 <pre><code>##                 %     %     %
-## sensitivity 92.96 94.20 96.15
-## specificity 98.25 98.28 96.99
-## PPV         97.06 97.01 92.59
-## NPV         95.73 96.61 98.47
-## FPR          1.75  1.72  3.01
-## FNR          7.04  5.80  3.85
-## Accuracy    96.22 96.76 96.76</code></pre>
+## sensitivity 90.20 95.65 90.28
+## specificity 96.27 97.41 98.23
+## PPV         90.20 95.65 97.01
+## NPV         96.27 97.41 94.07
+## FPR          3.73  2.59  1.77
+## FNR          9.80  4.35  9.72
+## Accuracy    94.59 96.76 95.14</code></pre>
 <p>Ahora hacemos el modelo con todo el training dataset y hacemos la
 prediccion del test dataset.</p>
 <pre class="r"><code>#Hacemos el stepwise y obtenemos el modelo
